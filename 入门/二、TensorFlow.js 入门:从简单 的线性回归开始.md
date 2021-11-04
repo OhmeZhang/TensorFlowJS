@@ -85,15 +85,68 @@ $$
 - **损失函数(loss function)**，即度量误差(error)的方法。这是模型度量训练集性能的方法， 同时也是正确改善模型的重要依据，损失越低越好。在训练时，如果绘制损失随时间变 化的图，应该能看到损失会逐渐降低。如果模型训练了很久，损失仍旧没有降低，这就 意味着模型并没有学习如何拟合数据。后面的章节会介绍如何调试这类问题。
 - **优化器(optimizer)**，即模型基于数据和损失函数更新权重(核和偏差)所使用的算法。
 
+```javascript
+model.compile({optimizer: 'sgd', loss: 'meanAbsoluteError'});
+/*
+	模型编译，调用compile方法
+	sgd 为优化器
+	meanAbsoluteError 为损失函数（指损失函数会先计算预测 modelOutput 和 target 的差值，然后取绝对值，最后返回这些绝对值的均值）
+	meanAbsoluteError = average( absolute( modelOutput - target ))
+*/
+```
+
+如果模型做出离目标相差甚远的错误预测，那么 `meanAbsoluteError` 就会非常大。`sgd` 是**随机梯度下降算法（stochastic gradient descent）**，简单说会用微积分来计算如何调整权重从而减小。
+
 ### 1.4 使模型拟合训练集
 
+1. `fit()` 方法训练模型
 
+```javascript
+// 代码中通过调用 fit() 方法来训练模型，让模型更好地拟合训练集。
+window.onload = async () => {
+    // ... 模型的定义
+    await model.fit(trainTensors.sizeMB, trainTensors.timeSec, {epochs: 10});
+    // epochs属性的配置对象，指定要针对训练集进行10次训练。
+    // 在深度学习领域，针对训练集的每一次完整迭代叫做一个轮次（epoch）
+}
+```
+
+2. `evaluate()` 方法评估模型，会根据输入的样例和目标来计算损失函数的值。evaluate 方法并不会更新模型的权重，评估模型相对于测试集的性能，可以了解到模型在应用程序中的表现情况。
+
+```javascript
+model.evaluate(testTensors.sizeMB, testTensors.timeSec).print(); // 计算测试集的性能，错误率
+// 例如打印：0.673499345779419
+```
+
+3. 手动计算平均绝对误差
+
+```javascript
+const avgDelaySec = tf.mean(trainData.timeSec); 
+avgDelaySec.print() // 0.295
+tf.mean(tf.abs(tf.sub(testData.timeSec, 0.295))).print() // 0.22
+// testData.timeSec.sub(0.295).abs().mean().print() 链式操作结果同上
+// tf.sub() 计算差值
+// tf.abs() 绝对值
+// tf.mean() 平均值
+```
+
+结果发现当前模型的准确率低于最简单的预测方法（0.673 > 0.22）。然后将 `model.fit(testData.sizeMB, testData.timeSec, {epochs: 200})` 迭代次数增加到200，会看到结果得出 0.045515045523643494，明显是误差小了很多。
+
+之前的模型是**欠拟合（underfiting）**的，也就是不够适应训练集。有欠拟合就会有**过拟合（overfiting）**，过拟合问题更难发现，是指模型针对训练集调整过多，导致不能很好将训练集规则泛化到未曾见过的数据上。
 
 ### 1.5 用经过训练的模型进行预测
 
+```javascript
+const smallFileMB = 1;
+const bigFileMB = 100;
+const hugeFileMB = 10000;
+model.predict(tf.tensor2d([[smallFileMB], [bigFileMB], [hugeFileMB]])).print();
+// [[0.1373825  ], [7.2438402  ], [717.8896484]]
+```
 
+一般而言，**外推(extrapolate)**远超出训练集范围的值是非常冒险的。此处将输入的变量封装成了适当形状的张量。输入张量的形状 inputShape 定义为[1]，也就是对模型来说，每个输入样例都必须是这个形状。每次调用 fit()和 predict() 都需要用到多个样例，因此，如果要提供 n 个样例，可以叠加输入样例，并把它们封装到一个输 入张量中，这样它的形状就是[n, 1]。如果我们忘了这些方法对张量形状的要求，向模型输入 了一个形状不匹配的张量，就会触发形状错误。
 
-## 2. **model.fit()**内部原理剖析:示例1中的梯度下降算法
+## 2. model.fit()内部原理剖析:示例1中的梯度下降算法
 
 
 
@@ -102,6 +155,8 @@ $$
 
 
 ### 2.2 探索梯度下降算法的内部原理:反向传播算法
+
+
 
 ## 3. 示例 2:涉及多个输入特征的线性回归
 
